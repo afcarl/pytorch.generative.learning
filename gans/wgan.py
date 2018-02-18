@@ -9,22 +9,25 @@ from utils import TQDMReporter, VisdomReporter
 from models import Generator, Discriminator
 
 
-def main(epochs, z_size, batch_size, output_dir, dataset, sample_batch_size=32, num_update_dis=1):
+class Critic(Discriminator):
+    def forward(self, input):
+        x = self.main(input)
+        return x.view(-1)
+
+
+def main(epochs, z_size, batch_size, output_dir, dataset, sample_batch_size=32, num_update_dis=5):
     assert torch.cuda.is_available(), "This script is only for GPU available environment"
     data_loader, num_color = {"cifar10": (cifar10(batch_size, 64), 3),
                               "fashionmnist": (fashion_mnist(batch_size, 64), 1)}[dataset.lower()]
     torch.backends.cudnn.benchmark = True
     generator = Generator(num_color, 64, z_size)
-    discriminator = Discriminator(num_color, 64)
+    critic = Critic(num_color, 64)
     generator.cuda()
-    discriminator.cuda()
+    critic.cuda()
 
-    gen_optimizer = torch.optim.Adam(params=generator.parameters(), lr=0.0002, betas=(0.5, 0.999))
-    dis_optimizer = torch.optim.Adam(params=discriminator.parameters(), lr=0.0002, betas=(0.5, 0.999))
+    gen_optimizer = torch.optim.RMSprop(params=generator.parameters(), lr=5e-5)
+    dis_optimizer = torch.optim.RMSprop(params=critic.parameters(), lr=5e-5)
 
-    # labels
-    real_label = Variable(torch.ones(batch_size)).cuda()
-    fake_label = Variable(torch.zeros(batch_size)).cuda()
     fixed_noise = Variable(torch.zeros(sample_batch_size, z_size, 1, 1).normal_(0, 1)).cuda()
     _range = TQDMReporter(range(epochs))
     viz = VisdomReporter(save_dir="log")
@@ -39,25 +42,26 @@ def main(epochs, z_size, batch_size, output_dir, dataset, sample_batch_size=32, 
             for _ in range(num_update_dis):
                 # train discriminator on real data
                 dis_optimizer.zero_grad()
-                output = discriminator(input)
-                loss_d_r = F.binary_cross_entropy(output, real_label)
+                output = critic(input)
+                loss_d_r = output.mean()
                 loss_d_r.backward()
 
                 # train discriminator on fake data
-                output = discriminator(generator(noise).detach())
-                loss_d_f = F.binary_cross_entropy(output, fake_label)
+                output = critic(generator(noise).detach())
+                loss_d_f = - output.mean()
                 loss_d_f.backward()
                 loss_d = loss_d_r + loss_d_f
                 dis_optimizer.step()
 
+                # weight clipping
+                for p in critic.parameters():
+                    p.data.clamp_(-0.01, 0.01)
+
             # train generator
-
             gen_optimizer.zero_grad()
-            output = discriminator(generator(noise))
-            # minimizing -log(D(G(z))) instead of maximizing -log(1-D(G(z)))
-            loss_g = F.binary_cross_entropy(output, real_label)
+            output = critic(generator(noise))
+            loss_g = output.mean()
             loss_g.backward()
-
             gen_optimizer.step()
 
             if iteration % 10 == 0:
