@@ -4,8 +4,9 @@ from torch.nn import functional as F
 from torch.autograd import Variable
 import torchvision.utils as vutils
 
-from tqdm import tqdm, trange
+from tqdm import tqdm
 from data import cifar10, fashion_mnist
+from utils import TQDMReporter, VisdomReporter
 
 
 def weights_init(m):
@@ -75,12 +76,11 @@ class Discriminator(nn.Module):
         return self.main(input)
 
 
-
-def main(epochs, z_size, batch_size, output_dir, dataset):
+def main(epochs, z_size, batch_size, output_dir, dataset, sample_batch_size=32, num_update_dis=1):
     assert torch.cuda.is_available(), "This script is only for GPU available environment"
     data_loader = {"cifar10": cifar10(batch_size, 64),
                    "fashionmnist": fashion_mnist(batch_size, 64)}[dataset.lower()]
-
+    torch.backends.cudnn.benchmark = True
     generator = Generator(3, 64, z_size)
     discriminator = Discriminator(3, 64)
     generator.cuda()
@@ -92,15 +92,18 @@ def main(epochs, z_size, batch_size, output_dir, dataset):
     # labels
     real_label = Variable(torch.ones(batch_size)).cuda()
     fake_label = Variable(torch.zeros(batch_size)).cuda()
-    fixed_noise = Variable(torch.zeros(batch_size, z_size, 1, 1).normal_(0, 1)).cuda()
-    _range = trange(epochs, ncols=80)
+    fixed_noise = Variable(torch.zeros(sample_batch_size, z_size, 1, 1).normal_(0, 1)).cuda()
+    _range = TQDMReporter(range(epochs))
+    viz = VisdomReporter(save_dir="log")
 
+    iteration = 0
     for ep in _range:
         for input, _ in tqdm(data_loader, ncols=80):
+            iteration += 1
             input = Variable(input).cuda()
             noise = Variable(torch.zeros(batch_size, z_size, 1, 1).normal_(0, 1)).cuda()
 
-            for _ in range(5):
+            for _ in range(num_update_dis):
                 # train discriminator on real data
                 dis_optimizer.zero_grad()
                 output = discriminator(input).view(-1)
@@ -123,11 +126,18 @@ def main(epochs, z_size, batch_size, output_dir, dataset):
 
             gen_optimizer.step()
 
-            _range.set_postfix(Gerr=loss_g.data.sum(), Derr=loss_d.data.sum())
+            if iteration % 10 == 0:
+                _range.add_scalars(dict(Gerr=loss_g.data.sum(), Derr=loss_d.data.sum()),
+                                   name="errors", idx=iteration)
+                viz.add_scalars(dict(Gerr=loss_g.data.sum(), Derr=loss_d.data.sum()),
+                                name="errors", idx=iteration)
 
-        vutils.save_image(generator(fixed_noise).data.cpu(),
+        gen_image = generator(fixed_noise).data.cpu()
+        vutils.save_image(gen_image,
                           f"./{output_dir}/fake_sample_{ep}.png",
                           normalize=True)
+        viz.add_images(gen_image, "images", iteration)
+    viz.save()
 
 
 if __name__ == '__main__':
