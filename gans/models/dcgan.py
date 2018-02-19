@@ -5,10 +5,10 @@ from torch.nn import functional as F
 def weights_init(m):
     classname = m.__class__.__name__
     if "Conv" in classname:
-        m.weight.data.normal_(0.0, 0.02)
+        nn.init.normal(m.weight, 0, 0.02)
     elif "BatchNorm" in classname:
-        m.weight.data.normal_(1.0, 0.02)
-        m.bias.data.fill_(0)
+        nn.init.normal(m.weight, 1, 0.02)
+        nn.init.constant(m.bias, 0)
 
 
 class Generator(nn.Module):
@@ -32,13 +32,13 @@ class Generator(nn.Module):
                 nn.ReLU(True),
                 # state size. (gen_hidden) x 32 x 32
                 nn.ConvTranspose2d(gen_hidden, color, 4, 2, 1, bias=False),
-                nn.Tanh()
                 # state size. (nc) x 64 x 64
         )
         self.apply(weights_init)
 
     def forward(self, input):
-        return self.main(input)
+        x = self.main(input)
+        return F.tanh(input)
 
 
 class Discriminator(nn.Module):

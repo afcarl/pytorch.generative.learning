@@ -1,10 +1,9 @@
 import torch
-from torch.nn import functional as F
 from torch.autograd import Variable
 import torchvision.utils as vutils
 
 from tqdm import tqdm
-from data import cifar10, fashion_mnist
+from utils.data import cifar10, fashion_mnist
 from utils import TQDMReporter, VisdomReporter
 from models import Generator, Discriminator
 
