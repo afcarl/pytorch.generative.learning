@@ -8,6 +8,11 @@ import numpy as np
 
 class Reporter(object):
     def __init__(self, save_dir):
+        """
+        base class of Reporter
+        >>> with Reporter("save_dir") as r:
+        >>>     r.add_scalar(1, "loss", idx=0)
+        """
         self._container = defaultdict(list)
         self._save_dir = save_dir
         self._filename = datetime.now().strftime("%b%d-%H-%M-%S") + ".json"
@@ -40,6 +45,13 @@ class Reporter(object):
             p.mkdir()
             with (p / self._filename).open("w") as f:
                 json.dump(self._container, f)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._save_dir is not None:
+            self.save()
 
     @staticmethod
     def _tensor_type_check(x):
@@ -129,7 +141,11 @@ class VisdomReporter(Reporter):
             x = np.array([x])
         elif "Tensor" in str(type(x)):
             x = x.numpy()
-        return x
+        return
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        super(VisdomReporter, self).__exit__(exc_type, exc_val, exc_tb)
+        self._viz.close()
 
     @staticmethod
     def _normalize(x):

@@ -77,14 +77,16 @@ def main(epochs, z_size, batch_size, output_dir, dataset, sample_batch_size=32, 
 if __name__ == '__main__':
     import pathlib
     import argparse
+    from utils import HyParameter
 
+    hp = HyParameter("configs/gan.yaml")
     p = argparse.ArgumentParser()
     p.add_argument("--outputdir", default="output")
     p.add_argument("--dataset", default="cifar10")
-    args = p.parse_args()
+    hp.register_hp(args=p.parse_args())
 
-    path = pathlib.Path(args.outputdir)
+    path = pathlib.Path(hp.outputdir)
     if not path.exists():
         path.mkdir()
-
-    main(500, 100, 64, args.outputdir, args.dataset)
+    main(hp.epochs, hp.latent_size, hp.batch_size,
+         hp.outputdir, hp.dataset)

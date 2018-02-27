@@ -1,0 +1,7 @@
+epochs: 500
+batch_size: 64
+latent_size: 64
+gen_hidden_size: 64
+dis_hidden_size: 64
+sample_batch_size: 32
+image_size: 64
