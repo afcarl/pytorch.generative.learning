@@ -12,10 +12,12 @@ class Reporter(object):
         base class of Reporter
         >>> with Reporter("save_dir") as r:
         >>>     r.add_scalar(1, "loss", idx=0)
+        # automatically save the results
         """
         self._container = defaultdict(list)
         self._save_dir = save_dir
-        self._filename = datetime.now().strftime("%b%d-%H-%M-%S") + ".json"
+        self._now = datetime.now().strftime("%b%d-%H-%M-%S")
+        self._filename = self._now + ".json"
 
     def add_scalar(self, x, name: str, idx: int):
         raise NotImplementedError
@@ -95,7 +97,7 @@ class VisdomReporter(Reporter):
         from visdom import Visdom
 
         super(VisdomReporter, self).__init__(save_dir)
-        self._viz = Visdom(port=port)
+        self._viz = Visdom(port=port, env=self._now)
         self._lines = defaultdict()
         assert self._viz.check_connection(), f"""
         Please launch visdom.server before calling VisdomReporter.
@@ -120,6 +122,7 @@ class VisdomReporter(Reporter):
         self._viz.line(X=X, Y=Y, update=None if is_new else "append", win=name, opts=opts)
 
     def add_parameters(self, x, name: str, idx: int, **kwargs):
+        # todo
         raise NotImplementedError
 
     def add_text(self, x, name: str, idx: int):
@@ -149,5 +152,39 @@ class VisdomReporter(Reporter):
 
     @staticmethod
     def _normalize(x):
+        # normalize tensor values in (0, 1)
         _min, _max = x.min(), x.max()
         return (x - _min) / (_max - _min)
+
+
+class TensorBoardReporter(Reporter):
+    def __init__(self, save_dir=None):
+        from tensorboardX import SummaryWriter
+
+        super(TensorBoardReporter, self).__init__(save_dir)
+        self._writer = SummaryWriter(log_dir=save_dir)
+
+    def add_scalar(self, x, name: str, idx: int):
+        self._register_data(x, name, idx)
+        self._writer.add_scalar(name, x, idx)
+
+    def add_scalars(self, x: dict, name, idx: int):
+        for k, v in x.items():
+            self._register_data(v, k, idx)
+        self._writer.add_scalars(name, x, idx)
+
+    def add_image(self, x, name: str, idx: int):
+        x, dim = self._tensor_type_check(x)
+        assert dim == 3
+        self._writer.add_image(name, x, idx)
+
+    def add_text(self, x, name: str, idx: int):
+        self._register_data(x, name, idx)
+        self._writer.add_text(name, x, idx)
+
+    def add_parameters(self, x, name: str, idx: int):
+        self._writer.add_histogram(name, x, idx, bins="sqrt")
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        super(TensorBoardReporter, self).__exit__(exc_type, exc_val, exc_tb)
+        self._writer.close()

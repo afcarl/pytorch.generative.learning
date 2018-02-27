@@ -16,7 +16,7 @@ class HyParameter(object):
 
         if len(kwargs) > 0:
             self._check_duplicated(kwargs.keys())
-            self._container.update(kwargs)
+            self._update(kwargs)
         self._set_getter()
 
     def register_hp(self, file_name=None, args=None):
@@ -25,7 +25,7 @@ class HyParameter(object):
         elif isinstance(args, argparse.Namespace):
             dic = vars(args)
             self._check_duplicated(dic.keys())
-            self._container.update(dic)
+            self._update(dic)
         else:
             raise Exception("Unknown argument!")
         self._set_getter()
@@ -49,17 +49,21 @@ class HyParameter(object):
             if k in keys:
                 raise Exception(f"key {k} is already used!")
 
+    def _update(self, dic: dict):
+        _dic = {}
+        for k, v in dic.items():
+            if isinstance(v, dict):
+                v = HyParameter(**v)
+            _dic[k] = v
+        self._container.update(_dic)
+
     def _set_getter(self):
+        # todo: these values are mutable so find a way to use setter
         for k, v in self._container.items():
             setattr(self, k, v)
 
     def __str__(self):
-        string = ""
+        string = "Hyper Parameters: \n"
         for k, v in self._container.items():
             string += f"{k}: {v}\n"
         return string
-
-
-if __name__ == '__main__':
-    pa = HyParameter(lr=0)
-    print(pa)
