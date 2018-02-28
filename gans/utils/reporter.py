@@ -4,6 +4,7 @@ import json
 import numbers
 from datetime import datetime
 import numpy as np
+from .miscs import get_git_hash
 
 
 class Reporter(object):
@@ -17,7 +18,7 @@ class Reporter(object):
         self._container = defaultdict(list)
         self._save_dir = save_dir
         self._now = datetime.now().strftime("%b%d-%H-%M-%S")
-        self._filename = self._now + ".json"
+        self._filename = self._now + get_git_hash() + ".json"
 
     def add_scalar(self, x, name: str, idx: int):
         raise NotImplementedError
@@ -72,6 +73,11 @@ class Reporter(object):
 
 class TQDMReporter(Reporter):
     def __init__(self, iterable, save_dir=None):
+        """
+        >>> with TQDMReporter(range(100)) as tqrange:
+        >>>     for i in tqrange:
+        >>>         pass
+        """
         from tqdm import tqdm
 
         super(TQDMReporter, self).__init__(save_dir)
